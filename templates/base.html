@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es" data-theme="{{ theme }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Wiki{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-top">
+          <a class="brand logo" href="{{ url_for('home') }}">Wiki</a>
+          <form class="theme-form" action="{{ url_for('set_theme') }}" method="post">
+            <input type="hidden" name="theme" value="{{ 'dark' if theme == 'light' else 'light' }}">
+            <button type="submit" class="ghost-button">{{ '🌙' if theme == 'light' else '☀️' }}</button>
+          </form>
+        </div>
+
+        <div class="sidebar-markdown">
+          {{ sidebar_html|safe }}
+        </div>
+
+        <nav class="sidebar-nav">
+          <a href="{{ url_for('home') }}">Home</a>
+          <a href="{{ url_for('media') }}">Media</a>
+          {% if current_user %}
+            <a href="{{ url_for('create_page') }}">New Page</a>
+            <a href="{{ url_for('edit_system_page', identifier='sidebar') }}">Edit Panel</a>
+          {% endif %}
+        </nav>
+
+        <div class="sidebar-pages">
+          <h2>Pages</h2>
+          <div class="page-links">
+            {% for item in sidebar_pages %}
+              <a href="{{ url_for('view_page', identifier=item['identifier']) }}">{{ item['title'] }}</a>
+            {% endfor %}
+          </div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="topbar-left">
+            <form class="search-form" action="{{ url_for('search') }}" method="get">
+              <input type="search" name="q" placeholder="Search pages" value="{{ request.args.get('q', '') }}">
+              <button type="submit">Search</button>
+            </form>
+          </div>
+          <div class="topbar-right">
+            {% if edit_url %}
+              <a class="icon-button" href="{{ edit_url }}" title="Edit this page">✏️</a>
+            {% endif %}
+            {% if current_user %}
+              <span class="user-chip">{{ current_user['username'] }}</span>
+              <form action="{{ url_for('logout') }}" method="post">
+                <button type="submit" class="ghost-button">Logout</button>
+              </form>
+            {% else %}
+              <a class="ghost-button link-button logo" href="{{ url_for('login', next=request.path) }}">Login</a>
+            {% endif %}
+          </div>
+        </header>
+
+        <section class="page-frame">
+          {% block content %}{% endblock %}
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ page['title'] }} - Wiki{% endblock %}
+{% block content %}
+  <article class="content-card">
+    <div class="page-heading">
+      <div>
+        <!-- <p class="eyebrow">/{{ page['identifier'] }}</p> -->
+        <h1>{{ page['title'] }}</h1>
+      </div>
+      
+      {% if delete_url %}
+        <form action="{{ delete_url }}" method="post" onsubmit="return confirm('Delete this page?');">
+          <button type="submit" class="danger-button">Delete</button>
+        </form>
+      {% endif %}
+    </div>
+    <hr>
+    <div class="markdown-body">
+      {{ page_html|safe }}
+    </div>
+  </article>
+{% endblock %}

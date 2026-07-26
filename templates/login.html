@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Login - Wiki{% endblock %}
+{% block content %}
+  <article class="content-card auth-card">
+    <p class="eyebrow">Authentication</p>
+    <h1>Login</h1>
+    <p class="muted">Only registered users can access editing, creation, and deletion.</p>
+
+    {% if error %}
+      <p class="alert error">{{ error }}</p>
+    {% endif %}
+
+    <form class="auth-form" method="post">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <label>
+        Username
+        <input type="text" name="username" autocomplete="username" required>
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="primary-button">Login</button>
+    </form>
+  </article>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Search - Wiki{% endblock %}
+{% block content %}
+  <article class="content-card">
+    <p class="eyebrow">Search</p>
+    <h1>Search Pages</h1>
+    <p class="muted">Results by title or Markdown content.</p>
+
+    {% if query %}
+      <div class="result-meta">Query: <strong>{{ query }}</strong></div>
+    {% endif %}
+
+    <div class="results-list">
+      {% for result in results %}
+        <a class="result-card" href="{{ url_for('view_page', identifier=result['identifier']) }}">
+          <h2>{{ result['title'] }}</h2>
+          <p>/{{ result['identifier'] }}</p>
+          <span>{{ result['snippet'] }}</span>
+        </a>
+      {% else %}
+        <p class="muted">No results found.</p>
+      {% endfor %}
+    </div>
+  </article>
+{% endblock %}

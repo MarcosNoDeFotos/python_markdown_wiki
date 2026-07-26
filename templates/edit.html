@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{% if form_mode == 'create' %}Create Page{% else %}Edit Page{% endif %} - Wiki{% endblock %}
+{% block content %}
+  <article class="content-card editor-card">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Markdown</p>
+        <h1>{% if form_mode == 'create' %}Create Page{% else %}Edit Page{% endif %}</h1>
+      </div>
+    </div>
+
+    {% if error %}
+      <p class="alert error">{{ error }}</p>
+    {% endif %}
+
+    <form class="editor-form" method="post">
+      <label>
+        Title
+        <input type="text" name="title" value="{{ page_title }}" required>
+      </label>
+
+      {% if form_mode == 'create' %}
+        <label>
+          Identifier
+          <input type="text" name="identifier" value="{{ page_identifier }}" placeholder="pagina-ejemplo" required>
+        </label>
+      {% else %}
+        <label>
+          Identifier
+          <input type="text" value="{{ page_identifier }}" disabled>
+        </label>
+      {% endif %}
+
+      <label>
+        Markdown Content
+        <textarea name="content" rows="22" required>{{ page_content }}</textarea>
+      </label>
+
+      <div class="form-actions">
+        <button type="submit" class="primary-button">{{ submit_label }}</button>
+      </div>
+    </form>
+  </article>
+{% endblock %}

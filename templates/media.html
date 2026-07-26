@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Biblioteca - Wiki{% endblock %}
+{% block content %}
+  <article class="content-card">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Media Library</p>
+        <h1>Uploaded Images</h1>
+      </div>
+    </div>
+
+    {% if error %}
+      <p class="alert error">{{ error }}</p>
+    {% endif %}
+
+    {% if message %}
+      <p class="alert success">Upload successful: <strong>{{ message }}</strong></p>
+    {% endif %}
+
+    {% if current_user %}
+      <form class="upload-form" method="post" enctype="multipart/form-data">
+        <input type="file" name="image" accept="image/*" required>
+        <button type="submit" class="primary-button">Subir imagen</button>
+      </form>
+    {% else %}
+      <p class="muted">Log in to upload new images.</p>
+    {% endif %}
+
+    <div class="image-grid">
+      {% for file in files %}
+        <article class="image-card">
+          <img src="{{ url_for('uploads', filename=file) }}" alt="{{ file }}">
+          <div class="image-card-body">
+            <strong>{{ file }}</strong>
+            <code>{{ url_for('uploads', filename=file) }}</code>
+          </div>
+        </article>
+      {% else %}
+        <p class="muted">No images have been uploaded yet.</p>
+      {% endfor %}
+    </div>
+  </article>
+{% endblock %}
