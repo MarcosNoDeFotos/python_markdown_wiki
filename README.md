@@ -4,6 +4,9 @@ A lightweight wiki built with Flask.
 
 Pages are written in Markdown, stored as `.md` files on the server, rendered to HTML, and organized with a persistent left sidebar.
 
+<img width="1917" height="912" alt="image" src="https://github.com/user-attachments/assets/4ad3e6d8-493a-47fb-935a-9c66926e3c28" />
+
+
 ## Features
 
 - Authentication at `/login` (by default, user is `admin` and password is `admin`)
