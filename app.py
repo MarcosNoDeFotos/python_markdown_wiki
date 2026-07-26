@@ -110,11 +110,11 @@ def init_db() -> None:
 
 
 def default_welcome_markdown() -> str:
-    return """# Bienvenido\n\nEsta es la portada de la wiki.\n\n- Usa el panel izquierdo para navegar.\n- Si estás autenticado, puedes editar cualquier página visible con el botón de lápiz.\n- Las páginas se guardan como archivos Markdown en el servidor.\n"""
+    return """# Welcome\n\nThis is the wiki's front page.\n\n- Use the left panel to navigate.\n- If you are authenticated, you can edit any visible page with the pencil button.\n- Pages are saved as Markdown files on the server.\n"""
 
 
 def default_sidebar_markdown() -> str:
-    return """# Navegación\n\nUsa esta columna para organizar secciones, atajos y enlaces internos.\n\n## Accesos rápidos\n\n- [Bienvenida](/)\n- [Buscar](/search)\n- [Biblioteca](/media)\n- [Nueva página](/new)\n"""
+    return """# Navigation\n\nUse this column to organize sections, shortcuts, and internal links.\n\n## Quick Access\n\n- [Welcome](/)\n- [Search](/search)\n- [Library](/media)\n- [New Page](/new)\n"""
 
 
 def ensure_seed_files() -> None:
@@ -145,7 +145,7 @@ def ensure_page_record(
 
 def ensure_seed_records() -> None:
     with sqlite3.connect(DB_PATH) as conn:
-        ensure_page_record(conn, "welcome", "Bienvenida", WELCOME_PATH, "system")
+        ensure_page_record(conn, "welcome", "Welcome", WELCOME_PATH, "system")
         ensure_page_record(conn, "sidebar", "Sidebar", SIDEBAR_PATH, "system")
         conn.commit()
 
@@ -361,7 +361,7 @@ def page_context(page_row: sqlite3.Row, content: str) -> dict[str, object]:
 def home():
     page = get_page_record("welcome")
     if page is None:
-        upsert_page("welcome", "Bienvenida", default_welcome_markdown(), kind="system")
+        upsert_page("welcome", "Welcome", default_welcome_markdown(), kind="system")
         page = get_page_record("welcome")
     content = read_page_file(page["filepath"])
     return render_template("page.html", **page_context(page, content))
@@ -381,12 +381,12 @@ def login():
         ).fetchone()
 
         if user is None:
-            error = "Usuario o contraseña inválidos."
+            error = "Invalid username or password."
         else:
             try:
                 PH.verify(user["password_hash"], password)
             except VerifyMismatchError:
-                error = "Usuario o contraseña inválidos."
+                error = "Invalid username or password."
             else:
                 auth_code = secrets.token_urlsafe(48)
                 code_hash = hash_code(auth_code)
@@ -452,12 +452,12 @@ def media():
             abort(403)
         uploaded = request.files.get("image")
         if uploaded is None or not uploaded.filename:
-            error = "Selecciona una imagen válida."
+            error = "Select a valid image."
         else:
             original_name = secure_filename(uploaded.filename)
             suffix = Path(original_name).suffix.lower()
             if suffix not in IMAGE_EXTENSIONS:
-                error = "Formato no permitido. Usa png, jpg, jpeg, gif, webp o svg."
+                error = "Format not allowed. Use png, jpg, jpeg, gif, webp, or svg."
             else:
                 filename = f"{secrets.token_hex(12)}{suffix}"
                 uploaded.save(UPLOADS_DIR / filename)
@@ -493,13 +493,13 @@ def create_page():
         initial_content = content
 
         if not identifier:
-            error = "El identificador es obligatorio."
+            error = "Identifier is required."
         elif not is_valid_identifier(identifier):
-            error = "El identificador solo puede contener letras minúsculas, números, guiones y guiones bajos."
+            error = "The identifier can only contain lowercase letters, numbers, hyphens, and underscores."
         elif get_page_record(identifier) is not None:
-            error = "Ya existe una página con ese identificador."
+            error = "A page with that identifier already exists."
         elif not title:
-            error = "El título es obligatorio."
+            error = "Title is required."
         else:
             upsert_page(identifier, title, content)
             return redirect(url_for("view_page", identifier=identifier))
@@ -533,7 +533,7 @@ def edit_system_page(identifier: str):
         current_title = request.form.get("title", "").strip()
         current_content = request.form.get("content", "")
         if not current_title:
-            error = "El título es obligatorio."
+            error = "Title is required."
         else:
             upsert_page(identifier, current_title, current_content, kind="system")
             return redirect(url_for("home") if identifier == "welcome" else url_for("view_page", identifier="welcome"))
@@ -578,7 +578,7 @@ def edit_page(identifier: str):
         current_title = request.form.get("title", "").strip()
         current_content = request.form.get("content", "")
         if not current_title:
-            error = "El título es obligatorio."
+            error = "Title is required."
         else:
             upsert_page(identifier, current_title, current_content, kind="page")
             return redirect(url_for("view_page", identifier=identifier))

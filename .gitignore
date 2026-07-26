@@ -1,0 +1,7 @@
+__pycache__
+
+data/uploads/
+*.png
+*.jpg
+*.gif
+*.webp
