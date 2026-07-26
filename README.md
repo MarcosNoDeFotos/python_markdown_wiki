@@ -1,4 +1,4 @@
-# Python Wiki (Flask)
+# Python Markdown Wiki (Flask)
 
 A lightweight wiki built with Flask.
 
