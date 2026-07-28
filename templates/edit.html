@@ -33,12 +33,97 @@
 
       <label>
         Markdown Content
-        <textarea name="content" rows="22" required>{{ page_content }}</textarea>
+        <textarea id="page-content-editor" name="content" rows="22" required>{{ page_content }}</textarea>
       </label>
+
+      <p id="clipboard-upload-status" class="alert success" hidden></p>
 
       <div class="form-actions">
         <button type="submit" class="primary-button">{{ submit_label }}</button>
       </div>
     </form>
   </article>
+
+  <script>
+    (function () {
+      const editor = document.getElementById("page-content-editor");
+      const statusNode = document.getElementById("clipboard-upload-status");
+      const uploadUrl = "{{ url_for('upload_image_api') }}";
+
+      if (!editor || !statusNode) {
+        return;
+      }
+
+      function setStatus(message, isError) {
+        statusNode.textContent = message;
+        statusNode.className = isError ? "alert error" : "alert success";
+        statusNode.hidden = !message;
+      }
+
+      function insertAtCursor(text) {
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        const before = editor.value.slice(0, start);
+        const after = editor.value.slice(end);
+        editor.value = before + text + after;
+        const newPos = start + text.length;
+        editor.selectionStart = newPos;
+        editor.selectionEnd = newPos;
+        editor.focus();
+      }
+
+      editor.addEventListener("paste", async function (event) {
+        const items = event.clipboardData && event.clipboardData.items;
+        if (!items || !items.length) {
+          return;
+        }
+
+        let imageFile = null;
+        for (const item of items) {
+          if (item.kind === "file" && item.type.startsWith("image/")) {
+            imageFile = item.getAsFile();
+            break;
+          }
+        }
+
+        if (!imageFile) {
+          return;
+        }
+
+        event.preventDefault();
+        setStatus("Subiendo imagen pegada...", false);
+
+        const extensionMap = {
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "image/gif": "gif",
+          "image/webp": "webp",
+          "image/svg+xml": "svg",
+        };
+        const ext = extensionMap[imageFile.type] || "png";
+        const fileName = `clipboard-${Date.now()}.${ext}`;
+        const payload = new FormData();
+        payload.append("image", imageFile, fileName);
+
+        try {
+          const response = await fetch(uploadUrl, {
+            method: "POST",
+            body: payload,
+            credentials: "same-origin",
+          });
+
+          const result = await response.json();
+          if (!response.ok) {
+            throw new Error(result.error || "No fue posible subir la imagen.");
+          }
+
+          const tag = `<img src="${result.url}" style="width:500px;">`;
+          insertAtCursor(tag);
+          setStatus("Imagen subida e insertada en el editor.", false);
+        } catch (error) {
+          setStatus(error.message || "Ocurrió un error al subir la imagen.", true);
+        }
+      });
+    })();
+  </script>
 {% endblock %}

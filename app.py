@@ -22,6 +22,7 @@ from flask import (
     Flask,
     abort,
     g,
+    jsonify,
     make_response,
     redirect,
     render_template,
@@ -32,8 +33,8 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+# BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = Path("data")
 PAGES_DIR = DATA_DIR / "pages"
 UPLOADS_DIR = DATA_DIR / "uploads"
 DB_PATH = DATA_DIR / "wiki.sqlite3"
@@ -163,6 +164,20 @@ def normalize_identifier(value: str) -> str:
 
 def is_valid_identifier(identifier: str) -> bool:
     return bool(IDENTIFIER_RE.fullmatch(identifier)) and identifier not in RESERVED_IDENTIFIERS
+
+
+def save_uploaded_image(uploaded) -> tuple[str | None, str | None]:
+    if uploaded is None or not uploaded.filename:
+        return None, "Select a valid image."
+
+    original_name = secure_filename(uploaded.filename)
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        return None, "Format not allowed. Use png, jpg, jpeg, gif, webp, or svg."
+
+    filename = f"{secrets.token_hex(12)}{suffix}"
+    uploaded.save(UPLOADS_DIR / filename)
+    return filename, None
 
 
 def load_pages(include_system: bool = True) -> list[sqlite3.Row]:
@@ -451,17 +466,7 @@ def media():
         if not is_authenticated():
             abort(403)
         uploaded = request.files.get("image")
-        if uploaded is None or not uploaded.filename:
-            error = "Select a valid image."
-        else:
-            original_name = secure_filename(uploaded.filename)
-            suffix = Path(original_name).suffix.lower()
-            if suffix not in IMAGE_EXTENSIONS:
-                error = "Format not allowed. Use png, jpg, jpeg, gif, webp, or svg."
-            else:
-                filename = f"{secrets.token_hex(12)}{suffix}"
-                uploaded.save(UPLOADS_DIR / filename)
-                message = filename
+        message, error = save_uploaded_image(uploaded)
 
     files = sorted(
         [path.name for path in UPLOADS_DIR.iterdir() if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS],
@@ -473,6 +478,22 @@ def media():
 @app.route("/uploads/<path:filename>")
 def uploads(filename: str):
     return send_from_directory(UPLOADS_DIR, filename)
+
+
+@app.route("/api/uploads/image", methods=["POST"])
+@login_required
+def upload_image_api():
+    uploaded = request.files.get("image")
+    filename, error = save_uploaded_image(uploaded)
+    if error is not None:
+        return jsonify({"error": error}), 400
+
+    return jsonify(
+        {
+            "filename": filename,
+            "url": url_for("uploads", filename=filename),
+        }
+    )
 
 
 @app.route("/new", methods=["GET", "POST"])
