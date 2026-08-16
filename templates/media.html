@@ -33,6 +33,11 @@
           <div class="image-card-body">
             <strong>{{ file }}</strong>
             <code>{{ url_for('uploads', filename=file) }}</code>
+            {% if current_user %}
+              <form action="{{ url_for('delete_media', filename=file) }}" method="post" onsubmit="return confirm('¿Eliminar esta imagen?');">
+                <button type="submit" class="danger-button">Eliminar imagen</button>
+              </form>
+            {% endif %}
           </div>
         </article>
       {% else %}

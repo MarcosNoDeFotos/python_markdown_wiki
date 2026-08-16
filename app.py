@@ -28,6 +28,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     send_from_directory,
     session,
     url_for,
@@ -550,9 +551,41 @@ def media():
     return render_template("media.html", files=files, message=message, error=error)
 
 
+@app.route("/media/delete/<path:filename>", methods=["POST"])
+@login_required
+def delete_media(filename: str):
+    file_path = (UPLOADS_DIR / filename).resolve()
+    uploads_root = UPLOADS_DIR.resolve()
+    if uploads_root not in file_path.parents or file_path.suffix.lower() not in IMAGE_EXTENSIONS:
+        abort(404)
+    if not file_path.is_file():
+        abort(404)
+
+    file_path.unlink()
+    return redirect(url_for("media"))
+
+
 @app.route("/uploads/<path:filename>")
 def uploads(filename: str):
-    return send_from_directory(UPLOADS_DIR, filename)
+    file_path = UPLOADS_DIR / filename
+    if not file_path.exists():
+        return f"No existe: {file_path}", 404
+    return send_file(file_path)
+
+
+def save_uploaded_image(uploaded) -> tuple[str | None, str | None]:
+    if uploaded is None or not uploaded.filename:
+        return None, "Select a valid image."
+
+    original_name = secure_filename(uploaded.filename)
+    suffix = Path(original_name).suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS:
+        return None, "Format not allowed. Use png, jpg, jpeg, gif, webp, or svg."
+
+    filename = f"{secrets.token_hex(12)}{suffix}"
+    uploaded.save(UPLOADS_DIR / filename)
+    return filename, None
+
 
 
 @app.route("/api/uploads/image", methods=["POST"])

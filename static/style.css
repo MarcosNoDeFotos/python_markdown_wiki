@@ -157,6 +157,10 @@ html[data-theme="dark"] .sidebar {
   gap: 10px;
 }
 
+.page-links {
+  padding-left: 14px;
+}
+
 .sidebar-nav a,
 .page-links a {
   padding: 0.75rem 0.9rem;
@@ -172,8 +176,17 @@ html[data-theme="dark"] .sidebar {
   box-shadow: 0 10px 30px var(--accent-soft);
 }
 
-.sidebar-pages h2 {
-  font-size: 1rem;
+.sidebar-pages summary {
+  cursor: pointer;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.sidebar-pages[open] summary {
   margin-bottom: 10px;
 }
 
@@ -415,6 +428,10 @@ html[data-theme="dark"] .sidebar {
   display: grid;
   gap: 8px;
   padding: 16px;
+}
+
+.image-card-body form {
+  margin-top: 4px;
 }
 
 .user-chip {

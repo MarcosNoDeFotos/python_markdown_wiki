@@ -30,14 +30,14 @@
           {% endif %}
         </nav>
 
-        <div class="sidebar-pages">
-          <h2>Pages</h2>
+        <details class="sidebar-pages">
+          <summary>Pages</summary>
           <div class="page-links">
             {% for item in sidebar_pages %}
               <a href="{{ url_for('view_page', identifier=item['identifier']) }}">{{ item['title'] }}</a>
             {% endfor %}
           </div>
-        </div>
+        </details>
       </aside>
 
       <main class="main-content">
