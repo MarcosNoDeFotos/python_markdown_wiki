@@ -35,6 +35,7 @@
     (function () {
       const content = document.getElementById("page-rendered-content");
       const variableInputs = document.querySelectorAll(".page-variable-input");
+      const variableSessionUrl = "{{ variable_session_url }}";
       if (!content) {
         return;
       }
@@ -91,7 +92,20 @@
       }
 
       variableInputs.forEach(function (input) {
-        input.addEventListener("input", renderVariables);
+        input.addEventListener("input", function () {
+          renderVariables();
+          fetch(variableSessionUrl, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({
+              name: input.dataset.variable,
+              value: input.value,
+            }),
+          }).catch(function () {
+            // La sustitución local sigue funcionando aunque la sesión no pueda actualizarse.
+          });
+        });
       });
       renderVariables();
     })();

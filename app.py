@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
-
+from paths import *
 import bleach
 import markdown as md
 from argon2 import PasswordHasher
@@ -29,18 +29,14 @@ from flask import (
     render_template,
     request,
     send_from_directory,
+    session,
     url_for,
 )
 from werkzeug.utils import secure_filename
 
 
 # BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path("data")
-PAGES_DIR = DATA_DIR / "pages"
-UPLOADS_DIR = DATA_DIR / "uploads"
-DB_PATH = DATA_DIR / "wiki.sqlite3"
-WELCOME_PATH = PAGES_DIR / "welcome.md"
-SIDEBAR_PATH = PAGES_DIR / "sidebar.md"
+
 
 IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,60}$")
 VARIABLE_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_-]*)\}")
@@ -244,6 +240,11 @@ def substitute_variables(content: str, variables: dict[str, str]) -> str:
     return VARIABLE_RE.sub(lambda match: variables.get(match.group(1), match.group(0)), content or "")
 
 
+def session_variables() -> dict[str, str]:
+    values = session.get("variable_values", {})
+    return values if isinstance(values, dict) else {}
+
+
 def upsert_page(
     identifier: str,
     title: str,
@@ -410,12 +411,20 @@ def page_context(page_row: sqlite3.Row, content: str) -> dict[str, object]:
         edit_url = url_for("edit_page", identifier=page_row["identifier"])
         delete_url = url_for("delete_page", identifier=page_row["identifier"])
     page_variables = normalize_variables(content, load_page_variables(page_row))
+    page_variables.update(
+        {
+            name: value
+            for name, value in session_variables().items()
+            if name in page_variables and isinstance(value, str)
+        }
+    )
     return {
         "page": page_row,
         "page_html": render_markdown(substitute_variables(content, page_variables)),
         "page_html_template": render_markdown(content),
         "page_variables": page_variables,
         "variable_names": extract_variables(content),
+        "variable_session_url": url_for("update_variable_session"),
         "edit_url": edit_url if is_authenticated() else None,
         "delete_url": delete_url if is_authenticated() else None,
     }
@@ -504,6 +513,23 @@ def search():
                     }
                 )
     return render_template("search.html", query=query, results=results)
+
+
+@app.route("/api/variables/session", methods=["POST"])
+def update_variable_session():
+    payload = request.get_json(silent=True) or {}
+    name = payload.get("name")
+    value = payload.get("value")
+    if not isinstance(name, str) or VARIABLE_RE.fullmatch("${" + name + "}") is None:
+        return jsonify({"error": "Invalid variable name."}), 400
+    if not isinstance(value, str):
+        return jsonify({"error": "Invalid variable value."}), 400
+
+    values = session_variables()
+    values[name] = value
+    session["variable_values"] = values
+    session.modified = True
+    return jsonify({"name": name, "value": value})
 
 
 @app.route("/media", methods=["GET", "POST"])
