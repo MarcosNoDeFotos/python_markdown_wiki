@@ -5,3 +5,8 @@ data/uploads/
 *.jpg
 *.gif
 *.webp
+data/pages/
+*.sqlite3
+*.sql
+*.db
+.venv/

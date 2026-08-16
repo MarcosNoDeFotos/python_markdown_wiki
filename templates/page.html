@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ page['title'] }} - Wiki{% endblock %}
 {% block content %}
+{% if variable_names %}
+  <details class="page-variables">
+    <summary>Cambiar variables de la página</summary>
+    {% for name in variable_names %}
+      <label>
+        {{ name }}
+        <input class="page-variable-input" type="text" data-variable="{{ name }}" value="{{ page_variables[name] }}">
+      </label>
+    {% endfor %}
+  </details>
+{% endif %}
   <article class="content-card">
     <div class="page-heading">
       <div>
@@ -15,8 +26,74 @@
       {% endif %}
     </div>
     <hr>
+    
     <div class="markdown-body">
-      {{ page_html|safe }}
+      <div id="page-rendered-content" data-template-html="{{ page_html_template|e }}">{{ page_html|safe }}</div>
     </div>
   </article>
+  <script>
+    (function () {
+      const content = document.getElementById("page-rendered-content");
+      const variableInputs = document.querySelectorAll(".page-variable-input");
+      if (!content) {
+        return;
+      }
+
+      const templateHtml = content.dataset.templateHtml;
+
+      function escapeHtml(value) {
+        return value.replace(/[&<>'"]/g, function (character) {
+          return {"&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"}[character];
+        });
+      }
+
+      function renderVariables() {
+        let html = templateHtml;
+        variableInputs.forEach(function (input) {
+          const token = "${" + input.dataset.variable + "}";
+          html = html.split(token).join(escapeHtml(input.value));
+        });
+        content.innerHTML = html;
+        enhanceCodeBlocks();
+      }
+
+      function enhanceCodeBlocks() {
+        content.querySelectorAll("pre").forEach(function (pre) {
+          if (pre.parentElement.classList.contains("code-block")) {
+            return;
+          }
+          const code = pre.querySelector("code");
+          const languageClass = code && Array.from(code.classList).find(function (name) {
+            return name.startsWith("language-");
+          });
+          const language = languageClass ? languageClass.slice("language-".length) : "text";
+          const wrapper = document.createElement("div");
+          wrapper.className = "code-block";
+          const header = document.createElement("div");
+          header.className = "code-block-header";
+          const label = document.createElement("span");
+          label.textContent = language;
+          const copyButton = document.createElement("button");
+          copyButton.type = "button";
+          copyButton.className = "copy-code-button";
+          copyButton.title = "Copiar código";
+          copyButton.setAttribute("aria-label", "Copiar código");
+          copyButton.textContent = "Copiar";
+          copyButton.addEventListener("click", async function () {
+            await navigator.clipboard.writeText(code ? code.textContent : pre.textContent);
+            copyButton.textContent = "Copiado";
+            window.setTimeout(function () { copyButton.textContent = "Copiar"; }, 1200);
+          });
+          header.append(label, copyButton);
+          pre.replaceWith(wrapper);
+          wrapper.append(header, pre);
+        });
+      }
+
+      variableInputs.forEach(function (input) {
+        input.addEventListener("input", renderVariables);
+      });
+      renderVariables();
+    })();
+  </script>
 {% endblock %}

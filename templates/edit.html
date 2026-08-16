@@ -13,7 +13,7 @@
       <p class="alert error">{{ error }}</p>
     {% endif %}
 
-    <form class="editor-form" method="post">
+    <form id="editor-form" class="editor-form" method="post">
       <label>
         Title
         <input type="text" name="title" value="{{ page_title }}" required>
@@ -33,10 +33,26 @@
 
       <label>
         Markdown Content
+        <div class="markdown-toolbar" role="toolbar" aria-label="Formato Markdown">
+          <button type="button" class="toolbar-button" data-action="heading" data-level="1" title="Encabezado 1" aria-label="Encabezado 1">H1</button>
+          <button type="button" class="toolbar-button" data-action="heading" data-level="2" title="Encabezado 2" aria-label="Encabezado 2">H2</button>
+          <button type="button" class="toolbar-button" data-action="bold" title="Negrita" aria-label="Negrita"><strong>B</strong></button>
+          <button type="button" class="toolbar-button" data-action="italic" title="Cursiva" aria-label="Cursiva"><em>I</em></button>
+          <button type="button" class="toolbar-button" data-action="code" title="Fragmento de código" aria-label="Fragmento de código">&lt;/&gt;</button>
+          <button type="button" class="toolbar-button" data-action="list" title="Lista con viñetas" aria-label="Lista con viñetas">&#8226;</button>
+          <button type="button" class="toolbar-button" data-action="link" title="Insertar enlace" aria-label="Insertar enlace">&#128279;</button>
+        </div>
         <textarea id="page-content-editor" name="content" rows="22" required>{{ page_content }}</textarea>
       </label>
 
       <p id="clipboard-upload-status" class="alert success" hidden></p>
+
+      <section class="variable-editor" aria-labelledby="variables-title">
+        <h2 id="variables-title">Variables de la página</h2>
+        <p class="muted">Define valores por defecto para las variables escritas como <code>${nombre}</code>.</p>
+        <div id="variable-fields" class="variable-fields"></div>
+        <input id="variables-json" type="hidden" name="variables_json" value='{{ variables_json|e }}'>
+      </section>
 
       <div class="form-actions">
         <button type="submit" class="primary-button">{{ submit_label }}</button>
@@ -46,11 +62,19 @@
 
   <script>
     (function () {
+      const form = document.getElementById("editor-form");
       const editor = document.getElementById("page-content-editor");
       const statusNode = document.getElementById("clipboard-upload-status");
+      const variableFields = document.getElementById("variable-fields");
+      const variablesJson = document.getElementById("variables-json");
       const uploadUrl = "{{ url_for('upload_image_api') }}";
+      const initialVariables = {{ variables_json|safe }};
+      let savedSelectionStart = 0;
+      let savedSelectionEnd = 0;
+      const undoStack = [];
+      let restoringUndoState = false;
 
-      if (!editor || !statusNode) {
+      if (!form || !editor || !statusNode || !variableFields || !variablesJson) {
         return;
       }
 
@@ -60,17 +84,169 @@
         statusNode.hidden = !message;
       }
 
+      function saveUndoState() {
+        if (restoringUndoState) {
+          return;
+        }
+        const currentState = {
+          value: editor.value,
+          selectionStart: editor.selectionStart,
+          selectionEnd: editor.selectionEnd,
+        };
+        const lastState = undoStack[undoStack.length - 1];
+        if (!lastState || lastState.value !== currentState.value) {
+          undoStack.push(currentState);
+        }
+      }
+
+      function undoLastChange() {
+        const previousState = undoStack.pop();
+        if (!previousState) {
+          return;
+        }
+        restoringUndoState = true;
+        editor.value = previousState.value;
+        editor.selectionStart = previousState.selectionStart;
+        editor.selectionEnd = previousState.selectionEnd;
+        savedSelectionStart = previousState.selectionStart;
+        savedSelectionEnd = previousState.selectionEnd;
+        restoringUndoState = false;
+        updateVariables();
+        editor.focus();
+      }
+
       function insertAtCursor(text) {
-        const start = editor.selectionStart;
-        const end = editor.selectionEnd;
+        saveUndoState();
+        const start = savedSelectionStart;
+        const end = savedSelectionEnd;
         const before = editor.value.slice(0, start);
         const after = editor.value.slice(end);
         editor.value = before + text + after;
         const newPos = start + text.length;
         editor.selectionStart = newPos;
         editor.selectionEnd = newPos;
+        savedSelectionStart = newPos;
+        savedSelectionEnd = newPos;
         editor.focus();
       }
+
+      function replaceSelection(before, after, placeholder) {
+        const start = savedSelectionStart;
+        const end = savedSelectionEnd;
+        const selected = editor.value.slice(start, end) || placeholder;
+        insertAtCursor(before + selected + after);
+        editor.selectionStart = start + before.length;
+        editor.selectionEnd = start + before.length + selected.length;
+        savedSelectionStart = editor.selectionStart;
+        savedSelectionEnd = editor.selectionEnd;
+        editor.focus();
+      }
+
+      function applyToolbarAction(action, button) {
+        if (action === "heading") {
+          const level = button.dataset.level;
+          replaceSelection(`${"#".repeat(Number(level))} `, "", "Título");
+        } else if (action === "bold") {
+          replaceSelection("**", "**", "texto en negrita");
+        } else if (action === "italic") {
+          replaceSelection("*", "*", "texto en cursiva");
+        } else if (action === "code") {
+          const language = window.prompt("Lenguaje del bloque (por ejemplo: python, bash)", "text");
+          if (language === null) {
+            return;
+          }
+          const safeLanguage = language.trim().replace(/[^A-Za-z0-9_+#.-]/g, "") || "text";
+          replaceSelection("\n```" + safeLanguage + "\n", "\n```", "escribe tu código aquí");
+        } else if (action === "list") {
+          replaceSelection("- ", "", "elemento de lista");
+        } else if (action === "link") {
+          const url = window.prompt("URL del enlace", "https://");
+          if (url !== null) {
+            replaceSelection(
+              `<a href="${url}" target="_blank">`,
+              "</a>",
+              "texto del enlace",
+            );
+          }
+        }
+      }
+
+      editor.addEventListener("select", function () {
+        savedSelectionStart = editor.selectionStart;
+        savedSelectionEnd = editor.selectionEnd;
+      });
+      editor.addEventListener("keyup", function () {
+        savedSelectionStart = editor.selectionStart;
+        savedSelectionEnd = editor.selectionEnd;
+      });
+      editor.addEventListener("mouseup", function () {
+        savedSelectionStart = editor.selectionStart;
+        savedSelectionEnd = editor.selectionEnd;
+      });
+      editor.addEventListener("beforeinput", function (event) {
+        if (!event.inputType.startsWith("history")) {
+          saveUndoState();
+        }
+      });
+      editor.addEventListener("keydown", function (event) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+          event.preventDefault();
+          undoLastChange();
+        }
+      });
+
+      document.querySelectorAll(".toolbar-button").forEach(function (button) {
+        button.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+        });
+        button.addEventListener("click", function () {
+          applyToolbarAction(button.dataset.action, button);
+        });
+      });
+
+      function variableNames() {
+        const names = [];
+        const pattern = /\$\{([A-Za-z_][A-Za-z0-9_-]*)\}/g;
+        let match;
+        while ((match = pattern.exec(editor.value)) !== null) {
+          if (!names.includes(match[1])) {
+            names.push(match[1]);
+          }
+        }
+        return names;
+      }
+
+      function updateVariables() {
+        const values = {};
+        variableFields.querySelectorAll("input[data-variable]").forEach(function (input) {
+          values[input.dataset.variable] = input.value;
+        });
+        const names = variableNames();
+        variableFields.replaceChildren();
+        names.forEach(function (name) {
+          const label = document.createElement("label");
+          label.textContent = name;
+          const input = document.createElement("input");
+          input.type = "text";
+          input.dataset.variable = name;
+          input.value = Object.prototype.hasOwnProperty.call(values, name) ? values[name] : (initialVariables[name] || "");
+          input.addEventListener("input", updateVariablesJson);
+          label.appendChild(input);
+          variableFields.appendChild(label);
+        });
+        updateVariablesJson();
+      }
+
+      function updateVariablesJson() {
+        const values = {};
+        variableFields.querySelectorAll("input[data-variable]").forEach(function (input) {
+          values[input.dataset.variable] = input.value;
+        });
+        variablesJson.value = JSON.stringify(values);
+      }
+
+      editor.addEventListener("input", updateVariables);
+      updateVariables();
 
       editor.addEventListener("paste", async function (event) {
         const items = event.clipboardData && event.clipboardData.items;

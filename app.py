@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -42,6 +43,7 @@ WELCOME_PATH = PAGES_DIR / "welcome.md"
 SIDEBAR_PATH = PAGES_DIR / "sidebar.md"
 
 IDENTIFIER_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,60}$")
+VARIABLE_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_-]*)\}")
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 RESERVED_IDENTIFIERS = {"login", "logout", "search", "media", "new", "uploads", "theme"}
 
@@ -104,10 +106,14 @@ def init_db() -> None:
                 filepath TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
-                kind TEXT NOT NULL DEFAULT 'page'
+                kind TEXT NOT NULL DEFAULT 'page',
+                variables TEXT NOT NULL DEFAULT '{}'
             );
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(pages)")}
+        if "variables" not in columns:
+            conn.execute("ALTER TABLE pages ADD COLUMN variables TEXT NOT NULL DEFAULT '{}'")
 
 
 def default_welcome_markdown() -> str:
@@ -207,22 +213,61 @@ def write_page_file(path: str, content: str) -> None:
         handle.write(normalized)
 
 
-def upsert_page(identifier: str, title: str, content: str, kind: str = "page") -> None:
+def extract_variables(content: str) -> list[str]:
+    return list(dict.fromkeys(VARIABLE_RE.findall(content or "")))
+
+
+def normalize_variables(content: str, values: dict[str, str] | None = None) -> dict[str, str]:
+    values = values or {}
+    return {name: str(values.get(name, "")) for name in extract_variables(content)}
+
+
+def parse_variables_json(value: str) -> dict[str, str]:
+    try:
+        parsed = json.loads(value or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def load_page_variables(page_row: sqlite3.Row | None) -> dict[str, str]:
+    if page_row is None:
+        return {}
+    try:
+        values = json.loads(page_row["variables"] or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    return values if isinstance(values, dict) else {}
+
+
+def substitute_variables(content: str, variables: dict[str, str]) -> str:
+    return VARIABLE_RE.sub(lambda match: variables.get(match.group(1), match.group(0)), content or "")
+
+
+def upsert_page(
+    identifier: str,
+    title: str,
+    content: str,
+    kind: str = "page",
+    variables: dict[str, str] | None = None,
+) -> None:
     file_path = PAGES_DIR / f"{identifier}.md"
     write_page_file(file_path, content)
+    normalized_variables = normalize_variables(content, variables)
     db = get_db()
     timestamp = now_iso()
     db.execute(
         """
-        INSERT INTO pages (identifier, title, filepath, created_at, updated_at, kind)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO pages (identifier, title, filepath, created_at, updated_at, kind, variables)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(identifier) DO UPDATE SET
             title = excluded.title,
             filepath = excluded.filepath,
             updated_at = excluded.updated_at,
-            kind = excluded.kind
+            kind = excluded.kind,
+            variables = excluded.variables
         """,
-        (identifier, title, str(file_path), timestamp, timestamp, kind),
+        (identifier, title, str(file_path), timestamp, timestamp, kind, json.dumps(normalized_variables)),
     )
     db.commit()
 
@@ -269,7 +314,7 @@ def render_markdown(content: str) -> str:
         )
 
     allowed_attrs = {
-        "a": ["href", "title", "rel"],
+        "a": ["href", "title", "target", "rel"],
         "img": img_attrs,
         "code": ["class"],
         "pre": ["class"],
@@ -364,9 +409,13 @@ def page_context(page_row: sqlite3.Row, content: str) -> dict[str, object]:
     else:
         edit_url = url_for("edit_page", identifier=page_row["identifier"])
         delete_url = url_for("delete_page", identifier=page_row["identifier"])
+    page_variables = normalize_variables(content, load_page_variables(page_row))
     return {
         "page": page_row,
-        "page_html": render_markdown(content),
+        "page_html": render_markdown(substitute_variables(content, page_variables)),
+        "page_html_template": render_markdown(content),
+        "page_variables": page_variables,
+        "variable_names": extract_variables(content),
         "edit_url": edit_url if is_authenticated() else None,
         "delete_url": delete_url if is_authenticated() else None,
     }
@@ -503,11 +552,13 @@ def create_page():
     initial_identifier = ""
     initial_title = ""
     initial_content = ""
+    initial_variables: dict[str, str] = {}
 
     if request.method == "POST":
         identifier = normalize_identifier(request.form.get("identifier", ""))
         title = request.form.get("title", "").strip()
         content = request.form.get("content", "")
+        initial_variables = normalize_variables(content, parse_variables_json(request.form.get("variables_json", "{}")))
 
         initial_identifier = identifier
         initial_title = title
@@ -522,7 +573,7 @@ def create_page():
         elif not title:
             error = "Title is required."
         else:
-            upsert_page(identifier, title, content)
+            upsert_page(identifier, title, content, variables=initial_variables)
             return redirect(url_for("view_page", identifier=identifier))
 
     return render_template(
@@ -533,6 +584,9 @@ def create_page():
         page_identifier=initial_identifier,
         page_title=initial_title,
         page_content=initial_content,
+        page_variables=initial_variables,
+        variable_names=extract_variables(initial_content),
+        variables_json=json.dumps(initial_variables),
         submit_label="Crear página",
     )
 
@@ -549,14 +603,19 @@ def edit_system_page(identifier: str):
     error = None
     current_content = read_page_file(page["filepath"])
     current_title = page["title"]
+    current_variables = normalize_variables(current_content, load_page_variables(page))
 
     if request.method == "POST":
         current_title = request.form.get("title", "").strip()
         current_content = request.form.get("content", "")
+        current_variables = normalize_variables(
+            current_content,
+            parse_variables_json(request.form.get("variables_json", "{}")),
+        )
         if not current_title:
             error = "Title is required."
         else:
-            upsert_page(identifier, current_title, current_content, kind="system")
+            upsert_page(identifier, current_title, current_content, kind="system", variables=current_variables)
             return redirect(url_for("home") if identifier == "welcome" else url_for("view_page", identifier="welcome"))
 
     return render_template(
@@ -567,6 +626,9 @@ def edit_system_page(identifier: str):
         page_identifier=identifier,
         page_title=current_title,
         page_content=current_content,
+        page_variables=current_variables,
+        variable_names=extract_variables(current_content),
+        variables_json=json.dumps(current_variables),
         submit_label="Guardar cambios",
     )
 
@@ -594,14 +656,19 @@ def edit_page(identifier: str):
     error = None
     current_content = read_page_file(page["filepath"])
     current_title = page["title"]
+    current_variables = normalize_variables(current_content, load_page_variables(page))
 
     if request.method == "POST":
         current_title = request.form.get("title", "").strip()
         current_content = request.form.get("content", "")
+        current_variables = normalize_variables(
+            current_content,
+            parse_variables_json(request.form.get("variables_json", "{}")),
+        )
         if not current_title:
             error = "Title is required."
         else:
-            upsert_page(identifier, current_title, current_content, kind="page")
+            upsert_page(identifier, current_title, current_content, kind="page", variables=current_variables)
             return redirect(url_for("view_page", identifier=identifier))
 
     return render_template(
@@ -612,6 +679,9 @@ def edit_page(identifier: str):
         page_identifier=identifier,
         page_title=current_title,
         page_content=current_content,
+        page_variables=current_variables,
+        variable_names=extract_variables(current_content),
+        variables_json=json.dumps(current_variables),
         submit_label="Guardar cambios",
     )
 
